@@ -1,52 +1,29 @@
-use std::io;
-use std::time::Duration;
-use rusb::{Context, Device, DeviceDescriptor, DeviceHandle, Direction, Recipient, request_type, RequestType};
-use crate::util::open_device;
+use hidapi::{HidDevice, HidError, HidResult};
 
 pub struct FT260 {
-    device: Device<Context>,
-    device_desc: DeviceDescriptor,
-    handle: DeviceHandle<Context>,
-    timeout: Duration
+    device: HidDevice,
 }
 
 impl FT260 {
-    pub fn new() -> Option<Self> {
-        match Context::new() {
-            Ok(mut context) => match open_device(&mut context, 0x0403, 0x6030) {
-                Some((device, device_desc, handle)) => {
-                    return Some(FT260{
-                        device,
-                        device_desc,
-                        handle,
-                        timeout: Duration::from_millis(20),
-                    })
-                }
-                None => {
-                    println!("could not find device {:04x}:{:04x}", 0403, 6030);
-                    None
-                },
-            },
-            Err(e) => panic!("could not initialize libusb: {}", e),
-        }
+    pub fn new() -> Result<Self, HidError> {
+        let api = hidapi::HidApi::new()?;
+
+        let (vid, pid) = (0x0403, 0x6030);
+
+        Ok(FT260 {
+            device: api.open(vid, pid).unwrap()
+        })
     }
 
     pub fn enable_uart(
         &mut self
-    ) -> rusb::Result<usize> {
-        let mut data = [0u8; 64];
+    ) -> HidResult<()> {
+        let mut data = [0u8; 3];
         data[0] = 0xA1;
         data[1] = 0x03;
         data[2] = 0x03;
 
-        self.handle.write_control(
-            request_type(Direction::Out, RequestType::Class, Recipient::Interface),
-            0x09,
-            0x03A1,
-            0x00,
-            &data,
-            self.timeout
-        )
+        self.device.send_feature_report(&data)
     }
 
     pub fn configure_uart(
@@ -56,8 +33,8 @@ impl FT260 {
         parity: u8,
         stop_bits: u8,
         breaking: u8,
-    ) -> rusb::Result<usize> {
-        let mut data = [0u8; 64];
+    ) -> HidResult<()>{
+        let mut data = [0u8; 11];
         data[0] = 0xA1;
         data[1] = 0x41;
         data[2] = 0x00; // Placeholder for flow_ctrl
@@ -74,28 +51,18 @@ impl FT260 {
         data[9] = stop_bits;
         data[10] = breaking;
 
-        self.handle.write_control(
-            request_type(Direction::Out, RequestType::Class, Recipient::Interface),
-            0x09,
-            0x03A1,
-            0x00,
-            &data,
-            self.timeout
-        )
+        self.device.send_feature_report(&data)
     }
 
-    pub fn receive_data(&mut self) -> Result<Vec<u8>, rusb::Error> {
+    pub fn receive_data(&mut self) -> Result<Vec<u8>, ()> {
         let mut buf = [0; 64];
-        match self.handle.read_interrupt(0x81, &mut buf, self.timeout) {
-            Ok(_len) => {
-                // Convert the relevant part of the buffer into a Vec and return it
-                Ok(buf[2..(buf[1] as usize + 2)].to_vec())
-            },
-            Err(err) => Err(err),
-        }
+
+        self.device.read_timeout(&mut buf, 3000).expect("TODO: panic message");
+
+        Ok(buf[2..(buf[1] as usize + 2)].to_vec())
     }
 
-    pub fn write_usb(&mut self, data: &[u8]) -> rusb::Result<usize> {
+    pub fn write_usb(&mut self, data: &[u8]) -> HidResult<usize> {
         // Calculate the length of the data
         let length = data.len() as u8;
         // Determine the appropriate report ID based on the length of the data
@@ -120,13 +87,8 @@ impl FT260 {
         // Construct the data payload with the appropriate report ID and length
         let mut payload = vec![report_id, length];
         payload.extend_from_slice(data);
-        payload.resize(64, 0);
 
-        let value: u16 = (0x03u16) << 8 | (report_id as u16);
-
-        self.handle.write_interrupt(0x02, payload.as_slice(), self.timeout)?;
-
-        Ok(0)
+        self.device.write(payload.as_slice())
     }
 
 }
