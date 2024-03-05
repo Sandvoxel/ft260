@@ -26,6 +26,16 @@ impl FT260 {
         self.device.send_feature_report(&data)
     }
 
+    pub fn reset_uart(
+        &mut self
+    ) -> HidResult<()> {
+        let mut data = [0u8; 2];
+        data[0] = 0xA1;
+        data[1] = 0x40;
+
+        self.device.send_feature_report(&data)
+    }
+
     pub fn configure_uart(
         &mut self,
         baud_rate: u32,
@@ -37,7 +47,7 @@ impl FT260 {
         let mut data = [0u8; 11];
         data[0] = 0xA1;
         data[1] = 0x41;
-        data[2] = 0x00; // Placeholder for flow_ctrl
+        data[2] = 0x04; // Placeholder for flow_ctrl
 
         // Convert baud rate to little-endian bytes
         let baud_bytes = baud_rate.to_le_bytes();
@@ -57,7 +67,7 @@ impl FT260 {
     pub fn receive_data(&mut self) -> Result<Vec<u8>, ()> {
         let mut buf = [0; 64];
 
-        self.device.read_timeout(&mut buf, 3000).expect("TODO: panic message");
+        self.device.read_timeout(&mut buf, 1).expect("TODO: panic message");
 
         Ok(buf[2..(buf[1] as usize + 2)].to_vec())
     }
