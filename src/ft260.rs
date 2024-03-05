@@ -21,7 +21,7 @@ impl FT260 {
         let mut data = [0u8; 3];
         data[0] = 0xA1;
         data[1] = 0x03;
-        data[2] = 0x03;
+        data[2] = 0x04;
 
         self.device.send_feature_report(&data)
     }
