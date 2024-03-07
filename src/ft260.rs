@@ -1,4 +1,5 @@
-use hidapi::{HidDevice, HidError, HidResult};
+use std::ffi::{CStr, CString};
+use hidapi::{DeviceInfo, HidDevice, HidError, HidResult};
 
 pub struct FT260 {
     device: HidDevice,
@@ -14,6 +15,15 @@ impl FT260 {
             device: api.open(vid, pid).unwrap()
         })
     }
+
+    pub fn open(path: String) -> Result<Self, HidError> {
+        let api = hidapi::HidApi::new()?;
+
+        Ok(FT260 {
+            device: api.open_path(&CString::new(path).unwrap()).unwrap()
+        })
+    }
+
 
     pub fn enable_uart(
         &mut self
@@ -64,10 +74,10 @@ impl FT260 {
         self.device.send_feature_report(&data)
     }
 
-    pub fn receive_data(&mut self) -> Result<Vec<u8>, ()> {
+    pub fn receive_data(&mut self) -> Result<Vec<u8>, HidError> {
         let mut buf = [0; 64];
 
-        self.device.read_timeout(&mut buf, 1).expect("TODO: panic message");
+        self.device.read_timeout(&mut buf, 1)?;
 
         Ok(buf[2..(buf[1] as usize + 2)].to_vec())
     }
