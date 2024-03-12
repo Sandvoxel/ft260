@@ -1,5 +1,5 @@
-use std::ffi::{CStr, CString};
-use hidapi::{DeviceInfo, HidDevice, HidError, HidResult};
+use std::ffi::{CString};
+use hidapi::{HidDevice, HidError, HidResult};
 
 pub struct FT260 {
     device: HidDevice,
